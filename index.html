@@ -1,0 +1,549 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Local Video A/B Slider</title>
+  <style>
+    :root { --split: 50%; }
+    html, body { height: 100%; }
+    body { margin: 0; background:#0b0b0b; color:#e8e8e8; font-family: system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol"; }
+    .container {
+      display: flex;
+      height: 100vh;
+      width: 100%;
+    }
+    .sidebar {
+      width: 250px;
+      background: #0f0f0f;
+      border-right: 1px solid #2a2a2a;
+      padding: 20px;
+      overflow-y: auto;
+      flex-shrink: 0;
+    }
+    .sidebar h2 {
+      font-size: 16px;
+      margin: 0 0 16px;
+      color: #f2f2f2;
+      font-weight: 600;
+    }
+    .video-option {
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      color: #e8e8e8;
+      padding: 12px;
+      margin-bottom: 10px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-size: 14px;
+    }
+    .video-option:hover {
+      background: #252525;
+      border-color: #3a3a3a;
+    }
+    .video-option.active {
+      background: #2a3f4f;
+      border-color: #4a8fc2;
+    }
+    .video-option .title {
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    .video-option .description {
+      font-size: 12px;
+      opacity: 0.7;
+    }
+    .wrap { 
+      flex: 1;
+      height: 100vh; 
+      padding: 16px; 
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    h1 { font-size: 18px; margin: 6px 0 12px; font-weight: 600; color: #f2f2f2; }
+    .panel { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+    .panel label { display: flex; align-items: center; gap: 8px; background: #1a1a1a; padding: 10px; border-radius: 10px; border: 1px solid #2a2a2a; }
+    input[type="file"] { display: inline-block; max-width: 100%; }
+    .player {
+      position: relative; 
+      width: 100%;
+      flex: 1;
+      background: #000; 
+      overflow: hidden; 
+      border-radius: 12px; 
+      border: 1px solid #2a2a2a;
+      max-height: calc(100vh - 150px);
+      touch-action: none;
+    }
+    video {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      object-fit: contain;
+      background: #000;
+    }
+    /* Top (right/B) video is clipped by the vertical wipe controlled by --split */
+    .top {
+      clip-path: polygon(0 0, var(--split) 0, var(--split) 100%, 0 100%);
+      will-change: clip-path;
+    }
+    /* Slider bar */
+    .slider {
+      position: absolute; left: calc(var(--split) - 2px); top: 0; bottom: 0; width: 4px;
+      background: #ffffffd0; box-shadow: 0 0 10px #000c; pointer-events: none;
+    }
+    /* Labels */
+    .video-labels {
+      position: absolute; top: 10px; left: 0; right: 0; 
+      display: flex; justify-content: space-between; padding: 0 20px;
+      pointer-events: none; z-index: 10;
+    }
+    .video-label {
+      background: rgba(0,0,0,0.7); color: #fff; padding: 6px 12px;
+      border-radius: 6px; font-size: 14px; font-weight: 600;
+      border: 1px solid rgba(255,255,255,0.2);
+    }
+    .video-label.left { background: rgba(0,80,120,0.8); }
+    .video-label.right { background: rgba(120,60,0,0.8); }
+    .controls {
+      display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 10px;
+    }
+    .controls > * { background: #1a1a1a; border: 1px solid #2a2a2a; color: #eee; border-radius: 10px; padding: 8px 10px; }
+    .controls button, .controls input[type="number"], .controls label { padding: 8px 10px; }
+    .controls input[type="range"] { width: 220px; }
+    .scrubber { flex: 1 1 300px; }
+    .note { opacity: .75; margin-top: 8px; }
+    .bad { color: #ffaaaa; }
+    .good { color: #a6f3a6; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="sidebar">
+      <h2>Select Video Pair</h2>
+      <div style="margin-bottom: 12px; padding: 8px; background: #1a1a1a; border-radius: 6px; font-size: 12px; color: #888;">
+        <strong>SimaUpscaleQ vs RealESRGAN</strong>
+      </div>
+      <div class="video-option active" data-video="koala_surfing">
+        <div class="title">Koala Surfing</div>
+        <div class="description">Koala on surfboard</div>
+      </div>
+      <div class="video-option" data-video="ocean_fire">
+        <div class="title">Ocean Fire Show</div>
+        <div class="description">Man spinning fire in front of ocean</div>
+      </div>
+      <div class="video-option" data-video="videoSRC21_07">
+        <div class="title">Car Crash</div>
+        <div class="description">High motion car crash sequence from SRC dataset</div>
+      </div>
+      <div style="margin: 16px 0 12px; padding: 8px; background: #1a1a1a; border-radius: 6px; font-size: 12px; color: #888;">
+        <strong>SimaUpscaleF vs RealESRGAN</strong>
+      </div>
+      <div class="video-option" data-video="snow_scene_veo3">
+        <div class="title">Snow Scene</div>
+        <div class="description">A furry creature walking through a winter scene</div>
+      </div>
+      <div class="video-option" data-video="garden_mj">
+        <div class="title">Garden Walk</div>
+        <div class="description">Detailed view of a botanical garden</div>
+      </div>
+      <div class="video-option" data-video="butterfly_mj">
+        <div class="title">Butterfly</div>
+        <div class="description">Video of butterfly in a woman's hands</div>
+      </div>
+    </div>
+    <div class="wrap">
+    <h1>RealESRGAN vs SimaUpscaleQ — Video Quality Comparison</h1>
+
+    <div class="panel" style="display: none;">
+      <label>Left (A)
+        <input id="fileA" type="file" accept="video/mp4,video/webm,video/ogg" />
+      </label>
+      <label>Right (B)
+        <input id="fileB" type="file" accept="video/mp4,video/webm,video/ogg" />
+      </label>
+    </div>
+
+    <div class="player" id="player">
+      <video id="vidA" class="bottom" preload="auto" muted playsinline></video>
+      <video id="vidB" class="top" preload="auto" muted playsinline></video>
+      <div class="video-labels">
+        <span class="video-label left" id="leftLabel">SimaUpscaleQ</span>
+        <span class="video-label right" id="rightLabel">RealESRGAN</span>
+      </div>
+      <div class="slider" aria-hidden="true"></div>
+    </div>
+
+    <div class="controls">
+      <button id="playPause" disabled>Play</button>
+      <label>Reveal B
+        <input id="split" type="range" min="0" max="100" value="50" />
+      </label>
+      <input id="seek" class="scrubber" type="range" min="0" max="1000" value="0" />
+      <span id="timeLabel">00:00 / 00:00</span>
+      <label>Rate
+        <input id="rate" type="number" step="0.25" min="0.25" max="4" value="1" />
+      </label>
+      <label><input id="loop" type="checkbox" checked /> Loop</label>
+      <span id="status"></span>
+    </div>
+
+    <p class="note">
+      Drag anywhere on the video to move the divider. Use keyboard shortcuts: Space to play/pause, arrow keys to seek.
+    </p>
+    </div>
+  </div>
+
+  <script>
+    const root   = document.documentElement;
+    const player = document.getElementById('player');
+    const vidA   = document.getElementById('vidA');
+    const vidB   = document.getElementById('vidB');
+    const fileA  = document.getElementById('fileA');
+    const fileB  = document.getElementById('fileB');
+
+    const playPause = document.getElementById('playPause');
+    const split     = document.getElementById('split');
+    const seek      = document.getElementById('seek');
+    const timeLabel = document.getElementById('timeLabel');
+    const rate      = document.getElementById('rate');
+    const loop      = document.getElementById('loop');
+    const status    = document.getElementById('status');
+
+    // State
+    let aReady = false, bReady = false;
+    let dragging = false;
+    let syncing = false;
+
+    function setSplit(pct) { root.style.setProperty('--split', pct + '%'); }
+    setSplit(split.value);
+
+    split.addEventListener('input', () => setSplit(split.value));
+
+    function updateSplitFromEvent(e) {
+      const rect = player.getBoundingClientRect();
+      const x = Math.min(Math.max(e.clientX - rect.left, 0), rect.width);
+      const pct = 100 * x / rect.width;
+      setSplit(pct);
+      split.value = Math.round(pct);
+    }
+
+    player.addEventListener('pointerdown', (e) => { 
+      dragging = true; 
+      updateSplitFromEvent(e);
+      // Pause sync while dragging to prevent conflicts
+      if (!vidA.paused) {
+        syncing = false;
+      }
+    });
+    window.addEventListener('pointermove', (e) => { 
+      if (dragging) updateSplitFromEvent(e); 
+    });
+    window.addEventListener('pointerup', () => { 
+      dragging = false;
+      // Resume sync after dragging
+      if (!vidA.paused) {
+        // Force hard sync after drag
+        vidB.currentTime = vidA.currentTime;
+        syncing = true;
+      }
+    });
+
+    function formatTime(s) {
+      const m = Math.floor(s / 60); const ss = Math.floor(s % 60);
+      return `${m.toString().padStart(2,'0')}:${ss.toString().padStart(2,'0')}`;
+    }
+
+    // Keep UI time display fresh
+    let isSeeking = false;
+    function updateTimeUI() {
+      if (!isSeeking) {
+        const dur = Math.max(vidA.duration || 0, vidB.duration || 0);
+        const cur = Math.max(vidA.currentTime || 0, vidB.currentTime || 0);
+        if (isFinite(dur) && dur > 0) {
+          seek.value = Math.round(1000 * cur / dur);
+          timeLabel.textContent = `${formatTime(cur)} / ${formatTime(dur)}`;
+        } else {
+          seek.value = 0;
+          timeLabel.textContent = `00:00 / 00:00`;
+        }
+      }
+      requestAnimationFrame(updateTimeUI);
+    }
+    requestAnimationFrame(updateTimeUI);
+    
+    // Track seeking state
+    seek.addEventListener('mousedown', () => { isSeeking = true; });
+    seek.addEventListener('mouseup', () => { isSeeking = false; });
+    seek.addEventListener('touchstart', () => { isSeeking = true; });
+    seek.addEventListener('touchend', () => { isSeeking = false; });
+
+    // Scrub both videos together
+    seek.addEventListener('input', () => {
+      if (!aReady || !bReady) return;
+      const dur = Math.max(vidA.duration || 0, vidB.duration || 0);
+      const t = dur * (seek.value / 1000);
+      if (isFinite(t) && dur > 0) {
+        syncing = false; // Temporarily disable sync during seeking
+        vidA.currentTime = t;
+        vidB.currentTime = t;
+        // Re-enable sync after a brief delay
+        setTimeout(() => { if (!vidA.paused) syncing = true; }, 100);
+      }
+    });
+
+    // Simple sync approach
+    function syncClock() {
+      if (!syncing) return;
+      const t = vidA.currentTime;
+      // Only sync if significantly out of sync
+      if (Math.abs((vidB.currentTime || 0) - t) > 0.033) {
+        vidB.currentTime = t;
+      }
+      if ('requestVideoFrameCallback' in vidA) {
+        vidA.requestVideoFrameCallback(syncClock);
+      } else {
+        setTimeout(syncClock, 16);
+      }
+    }
+
+    function startSync() {
+      syncing = true;
+      if ('requestVideoFrameCallback' in vidA) vidA.requestVideoFrameCallback(syncClock);
+      else syncClock();
+    }
+    function stopSync() { syncing = false; }
+
+    // Load local files via object URLs
+    function loadFile(input, videoEl, sideLabel) {
+      const f = input.files && input.files[0];
+      if (!f) return;
+      const url = URL.createObjectURL(f);
+      // Reset video element
+      videoEl.pause();
+      videoEl.removeAttribute('src');
+      videoEl.load();
+      videoEl.src = url;
+      videoEl.loop = loop.checked;
+      videoEl.muted = true;
+      videoEl.playsInline = true;
+
+      videoEl.onloadedmetadata = () => {
+        // Update aspect ratio once we have at least one video ready
+        const w = videoEl.videoWidth, h = videoEl.videoHeight;
+        if (w && h) player.style.aspectRatio = `${w} / ${h}`;
+        if (videoEl === vidA) aReady = true; else bReady = true;
+
+        // Warn if dimensions or fps mismatch
+        let warn = [];
+        if (aReady && bReady) {
+          if (vidA.videoWidth !== vidB.videoWidth || vidA.videoHeight !== vidB.videoHeight) {
+            warn.push('Resolution mismatch');
+          }
+          // Crude fps check via frame rate hint, not always available; still helpful.
+          const fpsA = vidA.getVideoPlaybackQuality?.().totalVideoFrames / Math.max(vidA.currentTime || 1, 1);
+          const fpsB = vidB.getVideoPlaybackQuality?.().totalVideoFrames / Math.max(vidB.currentTime || 1, 1);
+          // (We won't rely on this for gating; browsers don't expose true FPS reliably.)
+          if (warn.length) {
+            status.textContent = '⚠ ' + warn.join(', ');
+            status.className = 'bad';
+          } else {
+            status.textContent = '✓ Ready';
+            status.className = 'good';
+          }
+          playPause.disabled = false;
+          // Align starts
+          vidA.currentTime = 0; vidB.currentTime = 0;
+        }
+      };
+
+      videoEl.onerror = () => {
+        status.textContent = `Error loading ${sideLabel}. Try MP4 (H.264) or WebM.`;
+        status.className = 'bad';
+      };
+    }
+
+    // Load videos directly from server paths
+    function loadServerVideo(path, videoEl, sideLabel) {
+      videoEl.pause();
+      videoEl.removeAttribute('src');
+      videoEl.load();
+      videoEl.src = path;
+      videoEl.loop = loop.checked;
+      videoEl.muted = true;
+      videoEl.playsInline = true;
+
+      videoEl.onloadeddata = () => {
+        const w = videoEl.videoWidth, h = videoEl.videoHeight;
+        if (w && h) player.style.aspectRatio = `${w} / ${h}`;
+        if (videoEl === vidA) aReady = true; else bReady = true;
+
+        if (aReady && bReady) {
+          status.textContent = '✓ Ready';
+          status.className = 'good';
+          playPause.disabled = false;
+          vidA.currentTime = 0; 
+          vidB.currentTime = 0;
+          // Update seek bar max based on actual duration
+          const dur = Math.max(vidA.duration || 0, vidB.duration || 0);
+          if (dur > 0) {
+            seek.max = 1000;
+            timeLabel.textContent = `00:00 / ${formatTime(dur)}`;
+          }
+        }
+      };
+
+      videoEl.onerror = () => {
+        status.textContent = `Error loading ${sideLabel}`;
+        status.className = 'bad';
+      };
+    }
+
+    fileA.addEventListener('change', () => loadFile(fileA, vidA, 'Left (A)'));
+    fileB.addEventListener('change', () => loadFile(fileB, vidB, 'Right (B)'));
+
+    // Always use S3 URLs for testing
+    const videoBase = 'https://sima-upscale-demo.s3.amazonaws.com/';
+
+    // Video selection logic
+    const videoPairs = {
+      'koala_surfing': {
+        right: videoBase + 'videos/koala_surfing_resr.mp4',
+        left: videoBase + 'videos/koala_surfing_simaq.mp4',
+        name: 'Koala Surfing',
+        leftModel: 'SimaUpscaleQ',
+        rightModel: 'RealESRGAN'
+      },
+      'ocean_fire': {
+        right: videoBase + 'videos/ocean_fire_resr.mp4',
+        left: videoBase + 'videos/ocean_fire_simaq.mp4',
+        name: 'Ocean Fire',
+        leftModel: 'SimaUpscaleQ',
+        rightModel: 'RealESRGAN'
+      },
+      'videoSRC21_07': {
+        right: videoBase + 'videos/videoSRC21_07_resr.mp4',
+        left: videoBase + 'videos/videoSRC21_07_simaq.mp4',
+        name: 'Video SRC21_07',
+        leftModel: 'SimaUpscaleQ',
+        rightModel: 'RealESRGAN'
+      },
+      'butterfly_mj': {
+        right: videoBase + 'fidelity/butterfly_mj_resr.mp4',
+        left: videoBase + 'fidelity/butterfly_mj_simaf.mp4',
+        name: 'Butterfly MJ',
+        leftModel: 'SimaUpscaleF',
+        rightModel: 'RealESRGAN'
+      },
+      'garden_mj': {
+        right: videoBase + 'fidelity/garden_mj_resr.mp4',
+        left: videoBase + 'fidelity/garden_mj_simaf.mp4',
+        name: 'Garden MJ',
+        leftModel: 'SimaUpscaleF',
+        rightModel: 'RealESRGAN'
+      },
+      'snow_scene_veo3': {
+        right: videoBase + 'fidelity/snow_scene_veo3_resr.mp4',
+        left: videoBase + 'fidelity/snow_scene_veo3_simaf.mp4',
+        name: 'Snow Scene VEO3',
+        leftModel: 'SimaUpscaleF',
+        rightModel: 'RealESRGAN'
+      }
+    };
+
+    function loadVideoPair(videoKey) {
+      const pair = videoPairs[videoKey];
+      if (!pair) return;
+      
+      // Update labels
+      document.getElementById('leftLabel').textContent = pair.leftModel;
+      document.getElementById('rightLabel').textContent = pair.rightModel;
+      
+      // Update title
+      document.querySelector('h1').textContent = `${pair.leftModel} vs ${pair.rightModel} — Video Quality Comparison`;
+      
+      // Reset state
+      aReady = false;
+      bReady = false;
+      syncing = false;
+      playPause.textContent = 'Play';
+      playPause.disabled = true;
+      status.textContent = 'Loading...';
+      status.className = '';
+      
+      // Stop current videos
+      vidA.pause();
+      vidB.pause();
+      
+      // Load new videos (vidA is right/bottom, vidB is left/top)
+      loadServerVideo(pair.right, vidA, pair.rightModel);
+      loadServerVideo(pair.left, vidB, pair.leftModel);
+    }
+
+    // Handle video option clicks
+    document.querySelectorAll('.video-option').forEach(option => {
+      option.addEventListener('click', () => {
+        // Update active state
+        document.querySelectorAll('.video-option').forEach(o => o.classList.remove('active'));
+        option.classList.add('active');
+        
+        // Load the selected video pair
+        const videoKey = option.dataset.video;
+        loadVideoPair(videoKey);
+      });
+    });
+
+    // Auto-load the first video on page load
+    window.addEventListener('load', () => {
+      loadVideoPair('koala_surfing');
+    });
+
+    // Controls
+    playPause.addEventListener('click', async () => {
+      if (!(aReady && bReady)) return;
+      if (vidA.paused) {
+        try {
+          vidB.currentTime = vidA.currentTime;
+          await Promise.all([vidA.play(), vidB.play()]);
+          startSync();
+          playPause.textContent = 'Pause';
+        } catch (e) {
+          status.textContent = 'Autoplay blocked: click Play again or interact with the page.';
+          status.className = 'bad';
+        }
+      } else {
+        vidA.pause(); 
+        vidB.pause();
+        stopSync();
+        playPause.textContent = 'Play';
+      }
+    });
+
+    rate.addEventListener('change', () => {
+      const r = Number(rate.value);
+      vidA.playbackRate = r; vidB.playbackRate = r;
+    });
+
+    loop.addEventListener('change', () => { 
+      vidA.loop = loop.checked; 
+      vidB.loop = loop.checked; 
+    });
+    
+    // Simple loop sync
+    vidA.addEventListener('seeked', () => {
+      if (vidA.loop && vidA.currentTime < 0.5 && !isSeeking) {
+        vidB.currentTime = vidA.currentTime;
+      }
+    });
+
+    // Keyboard shortcuts
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Space') { e.preventDefault(); playPause.click(); }
+      if (e.code === 'ArrowLeft') { seek.stepDown(10); seek.dispatchEvent(new Event('input')); }
+      if (e.code === 'ArrowRight') { seek.stepUp(10); seek.dispatchEvent(new Event('input')); }
+    });
+  </script>
+</body>
+</html>
+
