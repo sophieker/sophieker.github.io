@@ -106,6 +106,19 @@
     }
     .video-label.left { background: rgba(0,80,120,0.8); }
     .video-label.right { background: rgba(120,60,0,0.8); }
+    .codec-metrics {
+      position: absolute; bottom: 10px; left: 0; right: 0;
+      display: flex; justify-content: space-between; padding: 0 20px;
+      pointer-events: none; z-index: 10;
+    }
+    .codec-metric {
+      background: rgba(0,0,0,0.8); color: #fff; padding: 6px 12px;
+      border-radius: 6px; font-size: 12px;
+      border: 1px solid rgba(255,255,255,0.2);
+    }
+    .codec-metric .value { font-weight: 600; color: #4ae; }
+    .codec-metric.left { background: rgba(0,80,120,0.8); }
+    .codec-metric.right { background: rgba(120,60,0,0.8); }
     .controls {
       display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 10px;
     }
@@ -116,6 +129,47 @@
     .note { opacity: .75; margin-top: 8px; }
     .bad { color: #ffaaaa; }
     .good { color: #a6f3a6; }
+    /* Toggle buttons for video sources */
+    .source-toggles {
+      position: absolute;
+      top: 10px;
+      left: 0;
+      right: 0;
+      display: flex;
+      justify-content: space-between;
+      padding: 0 20px;
+      z-index: 10;
+    }
+    .toggle-group {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      background: rgba(0,0,0,0.8);
+      border-radius: 6px;
+      padding: 2px;
+    }
+    .toggle-btn {
+      padding: 4px 10px;
+      background: transparent;
+      border: none;
+      color: #aaa;
+      cursor: pointer;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 600;
+      transition: all 0.2s;
+      min-width: 60px;
+    }
+    .toggle-btn.active {
+      background: rgba(255,255,255,0.2);
+      color: #fff;
+    }
+    .toggle-btn:hover:not(.active) {
+      background: rgba(255,255,255,0.1);
+      color: #ddd;
+    }
+    .toggle-group.left .toggle-btn.active { background: rgba(0,80,120,0.8); }
+    .toggle-group.right .toggle-btn.active { background: rgba(120,60,0,0.8); }
   </style>
 </head>
 <body>
@@ -144,13 +198,32 @@
         <div class="title">Snow Scene</div>
         <div class="description">A furry creature walking through a winter scene</div>
       </div>
-      <div class="video-option" data-video="garden_mj">
-        <div class="title">Garden Walk</div>
-        <div class="description">Detailed view of a botanical garden</div>
-      </div>
       <div class="video-option" data-video="butterfly_mj">
         <div class="title">Butterfly</div>
         <div class="description">Video of butterfly in a woman's hands</div>
+      </div>
+      <div class="video-option" data-video="car">
+        <div class="title">Car</div>
+        <div class="description">High-quality car footage</div>
+      </div>
+      <div class="video-option" data-video="dancing">
+        <div class="title">Dancing</div>
+        <div class="description">Dynamic dancing scene</div>
+      </div>
+      <div class="video-option" data-video="goat">
+        <div class="title">Goat</div>
+        <div class="description">Mountain goat in natural habitat</div>
+      </div>
+      <div style="margin: 16px 0 12px; padding: 8px; background: #1a1a1a; border-radius: 6px; font-size: 12px; color: #888;">
+        <strong>Deep vs. Standard Codec Comparison</strong>
+      </div>
+      <div class="video-option" data-video="deep_codec">
+        <div class="title">Bees</div>
+        <div class="description">Deep: 39.59 dB PSNR @ 216 kbps<br>Standard: 39.12 dB PSNR @ 605 kbps</div>
+      </div>
+      <div class="video-option" data-video="deep_codec_waves">
+        <div class="title">Waves</div>
+        <div class="description">Deep: 34.8 dB PSNR @ 1364 kbps<br>Standard: 33.9 dB PSNR @ 2836 kbps</div>
       </div>
     </div>
     <div class="wrap">
@@ -168,11 +241,27 @@
     <div class="player" id="player">
       <video id="vidA" class="bottom" preload="auto" muted playsinline></video>
       <video id="vidB" class="top" preload="auto" muted playsinline></video>
-      <div class="video-labels">
+      <div class="slider" aria-hidden="true"></div>
+      <div class="source-toggles" id="sourceToggles" style="display:none;">
+        <div class="toggle-group left">
+          <button class="toggle-btn active" data-side="left" data-source="simaf">SimaF</button>
+          <button class="toggle-btn" data-side="left" data-source="resr">RealESR</button>
+          <button class="toggle-btn" data-side="left" data-source="lr">Input LR</button>
+        </div>
+        <div class="toggle-group right">
+          <button class="toggle-btn" data-side="right" data-source="simaf">SimaF</button>
+          <button class="toggle-btn active" data-side="right" data-source="resr">RealESR</button>
+          <button class="toggle-btn" data-side="right" data-source="lr">Input LR</button>
+        </div>
+      </div>
+      <div class="video-labels" id="videoLabels" style="display:none;">
         <span class="video-label left" id="leftLabel">SimaUpscaleQ</span>
         <span class="video-label right" id="rightLabel">RealESRGAN</span>
       </div>
-      <div class="slider" aria-hidden="true"></div>
+      <div class="codec-metrics" id="codecMetrics" style="display:none;">
+        <span class="codec-metric left" id="leftMetric"></span>
+        <span class="codec-metric right" id="rightMetric"></span>
+      </div>
     </div>
 
     <div class="controls">
@@ -406,6 +495,12 @@
     // Always use S3 URLs for testing
     const videoBase = 'https://sima-upscale-demo.s3.amazonaws.com/';
 
+    // Track current video sources
+    let currentSources = {
+      left: 'simaf',
+      right: 'resr'
+    };
+
     // Video selection logic
     const videoPairs = {
       'koala_surfing': {
@@ -413,55 +508,147 @@
         left: videoBase + 'videos/koala_surfing_simaq.mp4',
         name: 'Koala Surfing',
         leftModel: 'SimaUpscaleQ',
-        rightModel: 'RealESRGAN'
+        rightModel: 'RealESRGAN',
+        category: 'quality'
       },
       'ocean_fire': {
         right: videoBase + 'videos/ocean_fire_resr.mp4',
         left: videoBase + 'videos/ocean_fire_simaq.mp4',
         name: 'Ocean Fire',
         leftModel: 'SimaUpscaleQ',
-        rightModel: 'RealESRGAN'
+        rightModel: 'RealESRGAN',
+        category: 'quality'
       },
       'videoSRC21_07': {
         right: videoBase + 'videos/videoSRC21_07_resr.mp4',
         left: videoBase + 'videos/videoSRC21_07_simaq.mp4',
         name: 'Video SRC21_07',
         leftModel: 'SimaUpscaleQ',
-        rightModel: 'RealESRGAN'
+        rightModel: 'RealESRGAN',
+        category: 'quality'
       },
       'butterfly_mj': {
+        simaf: videoBase + 'fidelity/butterfly_mj_simaf.mp4',
+        resr: videoBase + 'fidelity/butterfly_mj_resr.mp4',
+        lr: videoBase + 'fidelity/butterfly_mj_lr.mp4',
         right: videoBase + 'fidelity/butterfly_mj_resr.mp4',
         left: videoBase + 'fidelity/butterfly_mj_simaf.mp4',
         name: 'Butterfly MJ',
         leftModel: 'SimaUpscaleF',
-        rightModel: 'RealESRGAN'
-      },
-      'garden_mj': {
-        right: videoBase + 'fidelity/garden_mj_resr.mp4',
-        left: videoBase + 'fidelity/garden_mj_simaf.mp4',
-        name: 'Garden MJ',
-        leftModel: 'SimaUpscaleF',
-        rightModel: 'RealESRGAN'
+        rightModel: 'RealESRGAN',
+        category: 'fidelity'
       },
       'snow_scene_veo3': {
+        simaf: videoBase + 'fidelity/snow_scene_veo3_simaf.mp4',
+        resr: videoBase + 'fidelity/snow_scene_veo3_resr.mp4',
+        lr: videoBase + 'fidelity/snow_scene_veo3_lr.mp4',
         right: videoBase + 'fidelity/snow_scene_veo3_resr.mp4',
         left: videoBase + 'fidelity/snow_scene_veo3_simaf.mp4',
         name: 'Snow Scene VEO3',
         leftModel: 'SimaUpscaleF',
-        rightModel: 'RealESRGAN'
+        rightModel: 'RealESRGAN',
+        category: 'fidelity'
+      },
+      'car': {
+        simaf: videoBase + 'fidelity/car_simaf.mp4',
+        resr: videoBase + 'fidelity/car_resr.mp4',
+        lr: videoBase + 'fidelity/car_lr.mp4',
+        right: videoBase + 'fidelity/car_resr.mp4',
+        left: videoBase + 'fidelity/car_simaf.mp4',
+        name: 'Car',
+        leftModel: 'SimaUpscaleF',
+        rightModel: 'RealESRGAN',
+        category: 'fidelity'
+      },
+      'dancing': {
+        simaf: videoBase + 'fidelity/dancing_simaf.mp4',
+        resr: videoBase + 'fidelity/dancing_resr.mp4',
+        lr: videoBase + 'fidelity/dancing_lr.mp4',
+        right: videoBase + 'fidelity/dancing_resr.mp4',
+        left: videoBase + 'fidelity/dancing_simaf.mp4',
+        name: 'Dancing',
+        leftModel: 'SimaUpscaleF',
+        rightModel: 'RealESRGAN',
+        category: 'fidelity'
+      },
+      'goat': {
+        simaf: videoBase + 'fidelity/goat_simaf.mp4',
+        resr: videoBase + 'fidelity/goat_resr.mp4',
+        lr: videoBase + 'fidelity/goat_lr.mp4',
+        right: videoBase + 'fidelity/goat_resr.mp4',
+        left: videoBase + 'fidelity/goat_simaf.mp4',
+        name: 'Goat',
+        leftModel: 'SimaUpscaleF',
+        rightModel: 'RealESRGAN',
+        category: 'fidelity'
+      },
+      'deep_codec': {
+        right: videoBase + 'deep_codec/standard_codec.mp4',
+        left: videoBase + 'deep_codec/deep_codec.mp4',
+        name: 'Deep Codec Comparison',
+        leftModel: 'Deep Codec',
+        rightModel: 'Standard Codec',
+        leftMetrics: { psnr: '39.59 dB', bitrate: '216 kbps' },
+        rightMetrics: { psnr: '39.12 dB', bitrate: '605 kbps' },
+        category: 'codec'
+      },
+      'deep_codec_waves': {
+        right: videoBase + 'deep_codec/standard_codec_waves.mp4',
+        left: videoBase + 'deep_codec/deep_codec_waves.mp4',
+        name: 'Waves - Deep Codec Comparison',
+        leftModel: 'Deep Codec',
+        rightModel: 'Standard Codec',
+        leftMetrics: { psnr: '34.8 dB', bitrate: '1364 kbps' },
+        rightMetrics: { psnr: '33.9 dB', bitrate: '2836 kbps' },
+        category: 'codec'
       }
     };
+
+    let currentVideoKey = null;
 
     function loadVideoPair(videoKey) {
       const pair = videoPairs[videoKey];
       if (!pair) return;
       
-      // Update labels
-      document.getElementById('leftLabel').textContent = pair.leftModel;
-      document.getElementById('rightLabel').textContent = pair.rightModel;
+      currentVideoKey = videoKey;
+      
+      // Show/hide toggle buttons and labels based on category
+      const togglesEl = document.getElementById('sourceToggles');
+      const labelsEl = document.getElementById('videoLabels');
+      const metricsEl = document.getElementById('codecMetrics');
+      
+      if (pair.category === 'fidelity') {
+        togglesEl.style.display = '';
+        labelsEl.style.display = 'none';
+        metricsEl.style.display = 'none';
+        // Reset to default sources for fidelity videos
+        currentSources.left = 'simaf';
+        currentSources.right = 'resr';
+        updateToggleButtons();
+      } else if (pair.category === 'codec') {
+        togglesEl.style.display = 'none';
+        labelsEl.style.display = '';
+        metricsEl.style.display = '';
+        // Update labels and metrics for codec videos
+        document.getElementById('leftLabel').textContent = pair.leftModel;
+        document.getElementById('rightLabel').textContent = pair.rightModel;
+        document.getElementById('leftMetric').innerHTML = 
+          `PSNR: <span class="value">${pair.leftMetrics.psnr}</span> | Bitrate: <span class="value">${pair.leftMetrics.bitrate}</span>`;
+        document.getElementById('rightMetric').innerHTML = 
+          `PSNR: <span class="value">${pair.rightMetrics.psnr}</span> | Bitrate: <span class="value">${pair.rightMetrics.bitrate}</span>`;
+      } else {
+        togglesEl.style.display = 'none';
+        labelsEl.style.display = '';
+        metricsEl.style.display = 'none';
+        // Update labels for quality videos
+        document.getElementById('leftLabel').textContent = pair.leftModel;
+        document.getElementById('rightLabel').textContent = pair.rightModel;
+      }
       
       // Update title
-      document.querySelector('h1').textContent = `${pair.leftModel} vs ${pair.rightModel} — Video Quality Comparison`;
+      const leftLabel = getModelLabel(currentSources.left, pair.category);
+      const rightLabel = getModelLabel(currentSources.right, pair.category);
+      document.querySelector('h1').textContent = `${leftLabel} vs ${rightLabel} — Video Comparison`;
       
       // Reset state
       aReady = false;
@@ -476,10 +663,82 @@
       vidA.pause();
       vidB.pause();
       
-      // Load new videos (vidA is right/bottom, vidB is left/top)
-      loadServerVideo(pair.right, vidA, pair.rightModel);
-      loadServerVideo(pair.left, vidB, pair.leftModel);
+      // Load videos based on current sources or default
+      if (pair.category === 'fidelity') {
+        const leftVideo = pair[currentSources.left] || pair.left;
+        const rightVideo = pair[currentSources.right] || pair.right;
+        loadServerVideo(rightVideo, vidA, getModelLabel(currentSources.right, pair.category));
+        loadServerVideo(leftVideo, vidB, getModelLabel(currentSources.left, pair.category));
+      } else {
+        loadServerVideo(pair.right, vidA, pair.rightModel);
+        loadServerVideo(pair.left, vidB, pair.leftModel);
+      }
     }
+
+    function getModelLabel(source, category) {
+      if (source === 'simaf') return 'SimaUpscaleF';
+      if (source === 'simaq') return 'SimaUpscaleQ';
+      if (source === 'resr') return 'RealESRGAN';
+      if (source === 'lr') return 'Input LR';
+      return source;
+    }
+
+
+    function updateToggleButtons() {
+      document.querySelectorAll('.toggle-btn').forEach(btn => {
+        const side = btn.dataset.side;
+        const source = btn.dataset.source;
+        if (currentSources[side] === source) {
+          btn.classList.add('active');
+        } else {
+          btn.classList.remove('active');
+        }
+      });
+    }
+
+    // Handle toggle button clicks
+    document.querySelectorAll('.toggle-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const side = btn.dataset.side;
+        const source = btn.dataset.source;
+        const pair = videoPairs[currentVideoKey];
+        
+        if (!pair || pair.category !== 'fidelity') return;
+        if (currentSources[side] === source) return; // Already selected
+        
+        // Update current source
+        currentSources[side] = source;
+        updateToggleButtons();
+        
+        // Update title
+        const leftLabel = getModelLabel(currentSources.left, pair.category);
+        const rightLabel = getModelLabel(currentSources.right, pair.category);
+        document.querySelector('h1').textContent = `${leftLabel} vs ${rightLabel} — Video Comparison`;
+        
+        // Load the new video
+        const videoPath = pair[source];
+        const videoEl = side === 'left' ? vidB : vidA;
+        const wasPlaying = !vidA.paused;
+        
+        // Stop playback
+        if (wasPlaying) {
+          vidA.pause();
+          vidB.pause();
+          stopSync();
+          playPause.textContent = 'Play';
+        }
+        
+        // Reset ready state for the side being changed
+        if (side === 'left') {
+          bReady = false;
+        } else {
+          aReady = false;
+        }
+        
+        // Load new video
+        loadServerVideo(videoPath, videoEl, getModelLabel(source, pair.category));
+      });
+    });
 
     // Handle video option clicks
     document.querySelectorAll('.video-option').forEach(option => {
@@ -546,4 +805,3 @@
   </script>
 </body>
 </html>
-
